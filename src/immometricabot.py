@@ -530,7 +530,7 @@ def main():
         if not os.path.exists(CSV_FILE_PATH):
             print(f"\n✗ ERROR: CSV file not found at: {CSV_FILE_PATH}")
             print("\nPlease update the CSV_FILE_PATH in the script with your file location.")
-            print("Example: CSV_FILE_PATH = 'C:/Users/YourName/Downloads/immometrica.csv'")
+            print("Example: CSV_FILE_PATH = 'C:/Users/YourName/Downloads/offers(2).csv'")
             return
         
         # Read CSV file
