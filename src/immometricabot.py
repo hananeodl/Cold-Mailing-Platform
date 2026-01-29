@@ -22,7 +22,7 @@ TEST_IMMOSCOUT_LIMIT = 11
 
 
 # Configuration
-CSV_FILE_PATH = "/home/rania/Downloads/offers.csv"  # Change this to your CSV file path
+CSV_FILE_PATH = "/home/rania/Downloads/Immo-vt.csv"  # Change this to your CSV file path
 
 def setup_driver():
     """Initialize Chrome driver with options"""
@@ -89,14 +89,6 @@ def open_detail_page(driver, url, index):
         return False
 
 def click_news_button(driver, index):
-    """
-    Clicks the ImmoScout 'Nachricht' contact button reliably.
-    Handles:
-    - React rendering
-    - SVG/text nesting
-    - iframe context
-    """
-
     print(f"[{index}] Looking for contact button...")
     wait = WebDriverWait(driver, 20)
 
@@ -219,7 +211,7 @@ info@immo-vt.de"""
     input.value = value;
     input.dispatchEvent(new Event('input', { bubbles: true }));
     input.dispatchEvent(new Event('change', { bubbles: true }));
-""", email_input, "info@immo-vt.de")
+""", email_input, "interessent@immo-vt.de")
 
 
     print(f"[{index}] ✓ Email entered")
@@ -280,41 +272,7 @@ def handle_immoscout(driver, index):
     # Step 2: Fill + submit message
     fill_and_submit_immoscout_message(driver, index)
 
-"""    
-def click_premium_unlock_button(driver, index, wait_seconds=2):
 
-    print(f"[{index}] Waiting {wait_seconds}s before premium unlock...")
-    time.sleep(wait_seconds)
-
-    wait = WebDriverWait(driver, 20)
-
-    try:
-        # 1. Button presence
-        unlock_btn = wait.until(
-            EC.presence_of_element_located((
-                By.XPATH,
-                "//button[@data-testid='get-premium-membership-button']"
-            ))
-        )
-
-        # 2. Wait until enabled (React sometimes disables briefly)
-        wait.until(lambda d: unlock_btn.is_enabled())
-
-        # 3. Scroll + JS click
-        driver.execute_script(
-            "arguments[0].scrollIntoView({block:'center'});", unlock_btn
-        )
-        time.sleep(0.5)
-        driver.execute_script("arguments[0].click();", unlock_btn)
-
-        print(f"[{index}] ✓ Premium unlock button clicked")
-        return True
-
-    except Exception as e:
-        print(f"[{index}] ❌ Failed to click premium button: {e}")
-        driver.save_screenshot(f"premium_button_fail_{index}.png")
-        return False
-"""
 def handle_kleinanzeigen(driver, index):
     wait = WebDriverWait(driver, 20)
 
@@ -443,6 +401,13 @@ def print_summary(results):
                 print(f"  - Listing {r['index']}: {r['url']}")
     
     print("="*60)
+"""
+from core.lead_manager import (
+    can_send_message,
+    mark_message_sent,
+    mark_followup_sent
+)
+"""
 
 
 COLUMN_HANDLERS = {
