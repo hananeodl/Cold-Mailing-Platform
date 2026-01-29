@@ -1,6 +1,8 @@
+from datetime import datetime, timezone
+
 from flask import Blueprint, request, jsonify
-from .services import AccountManagerService, CustomerService, SearchService
-from .models import db
+from .services import AccountManagerService, CustomerService, SearchService, ListingService
+from .models import db, AccountManager, Customer, Search
 
 # Create blueprint
 api_bp = Blueprint('api', __name__, url_prefix='/api/v1')
@@ -351,6 +353,375 @@ def health_check():
         return success_response({'status': 'healthy', 'database': 'connected'})
     except Exception as e:
         return error_response({'status': 'unhealthy', 'error': str(e)}, 500)
+
+# ==================== #
+# Listings ENDPOINTS
+# ==================== #
+
+@api_bp.route('/listings', methods=['GET'])
+def get_listings():
+    """Get all listings with optional filters"""
+    try:
+        # Parse filters from query parameters
+        filters = {}
+
+        # Customer filter
+        customer_id = request.args.get('customer_id')
+        if customer_id:
+            try:
+                filters['customer_id'] = int(customer_id)
+            except ValueError:
+                return jsonify({
+                    'error': 'customer_id must be an integer',
+                    'status': 'error'
+                }), 400
+
+        # Search filter
+        search_id = request.args.get('search_id')
+        if search_id:
+            try:
+                filters['search_id'] = int(search_id)
+            except ValueError:
+                return jsonify({
+                    'error': 'search_id must be an integer',
+                    'status': 'error'
+                }), 400
+
+        # Platform filter
+        platform = request.args.get('platform')
+        if platform:
+            filters['platform'] = platform
+
+        # Status filter
+        status = request.args.get('status')
+        if status:
+            filters['status'] = status
+
+        # Price range filters
+        min_price = request.args.get('min_price')
+        if min_price:
+            try:
+                filters['min_price'] = float(min_price)
+            except ValueError:
+                return jsonify({
+                    'error': 'min_price must be a number',
+                    'status': 'error'
+                }), 400
+
+        max_price = request.args.get('max_price')
+        if max_price:
+            try:
+                filters['max_price'] = float(max_price)
+            except ValueError:
+                return jsonify({
+                    'error': 'max_price must be a number',
+                    'status': 'error'
+                }), 400
+
+        # Text search filter
+        search_text = request.args.get('search')
+        if search_text:
+            filters['search_text'] = search_text
+
+        # Pagination parameters
+        page = request.args.get('page', 1, type=int)
+        per_page = request.args.get('per_page', 20, type=int)
+
+        # Get all listings (for now without pagination)
+        listings = ListingService.get_all_listings(filters)
+
+        # Convert to list of dicts
+        listings_data = []
+        for listing in listings:
+            listings_data.append({
+                'id': listing.id,
+                'title': listing.title,
+                'customer_id': listing.customer_id,
+                'search_id': listing.search_id,
+                'platform': listing.platform,
+                'platform_display': listing.platform_display,
+                'location': listing.location,
+                'address': listing.address,
+                'postal_code': listing.postal_code,
+                'city': listing.city,
+                'property_type': listing.property_type,
+                'rooms': listing.rooms,
+                'living_area': listing.living_area,
+                'year_built': listing.year_built,
+                'price': float(listing.price) if listing.price else None,
+                'price_per_sqm': float(listing.price_per_sqm) if listing.price_per_sqm else None,
+                'contact_name': listing.contact_name,
+                'contact_phone': listing.contact_phone,
+                'contact_email': listing.contact_email,
+                'status': listing.status,
+                'url': listing.url,
+                'description': listing.description,
+                'scraped_at': listing.scraped_at.isoformat() if listing.scraped_at else None,
+                'contacted_at': listing.contacted_at.isoformat() if listing.contacted_at else None,
+                'responded_at': listing.responded_at.isoformat() if listing.responded_at else None,
+                'created_at': listing.created_at.isoformat() if listing.created_at else None
+            })
+
+        return jsonify({
+            'listings': listings_data,
+            'count': len(listings_data),
+            'status': 'success'
+        })
+
+    except Exception as e:
+        return jsonify({
+            'error': f'Failed to fetch listings: {str(e)}',
+            'status': 'error'
+        }), 500
+
+
+@api_bp.route('/listings', methods=['POST'])
+def create_listing():
+    """Create a new listing"""
+    try:
+        data = request.get_json()
+
+        # Validate required fields
+        required_fields = ['title', 'platform', 'customer_id']
+        for field in required_fields:
+            if field not in data:
+                return jsonify({
+                    'error': f'Missing required field: {field}',
+                    'status': 'error'
+                }), 400
+
+        # Create listing
+        listing = ListingService.create_listing(data)
+
+        return jsonify({
+            'message': 'Listing created successfully',
+            'listing': {
+                'id': listing.id,
+                'title': listing.title,
+                'customer_id': listing.customer_id,
+                'platform': listing.platform,
+                'status': listing.status,
+                'created_at': listing.created_at.isoformat() if listing.created_at else None
+            },
+            'status': 'success'
+        }), 201
+
+    except ValueError as e:
+        return jsonify({
+            'error': str(e),
+            'status': 'error'
+        }), 400
+    except Exception as e:
+        return jsonify({
+            'error': f'Failed to create listing: {str(e)}',
+            'status': 'error'
+        }), 500
+
+
+@api_bp.route('/listings/<int:listing_id>', methods=['GET'])
+def get_listing(listing_id):
+    """Get a specific listing by ID"""
+    try:
+        listing = ListingService.get_listing_by_id(listing_id)
+
+        if not listing:
+            return jsonify({
+                'error': f'Listing with ID {listing_id} not found',
+                'status': 'error'
+            }), 404
+
+        return jsonify({
+            'listing': {
+                'id': listing.id,
+                'title': listing.title,
+                'customer_id': listing.customer_id,
+                'search_id': listing.search_id,
+                'external_id': listing.external_id,
+                'platform': listing.platform,
+                'platform_display': listing.platform_display,
+                'location': listing.location,
+                'address': listing.address,
+                'postal_code': listing.postal_code,
+                'city': listing.city,
+                'property_type': listing.property_type,
+                'rooms': listing.rooms,
+                'living_area': listing.living_area,
+                'year_built': listing.year_built,
+                'price': float(listing.price) if listing.price else None,
+                'price_per_sqm': float(listing.price_per_sqm) if listing.price_per_sqm else None,
+                'contact_name': listing.contact_name,
+                'contact_phone': listing.contact_phone,
+                'contact_email': listing.contact_email,
+                'status': listing.status,
+                'url': listing.url,
+                'description': listing.description,
+                'scraped_at': listing.scraped_at.isoformat() if listing.scraped_at else None,
+                'contacted_at': listing.contacted_at.isoformat() if listing.contacted_at else None,
+                'responded_at': listing.responded_at.isoformat() if listing.responded_at else None,
+                'created_at': listing.created_at.isoformat() if listing.created_at else None
+            },
+            'status': 'success'
+        })
+
+    except Exception as e:
+        return jsonify({
+            'error': f'Failed to fetch listing: {str(e)}',
+            'status': 'error'
+        }), 500
+
+@api_bp.route('/listings/<int:listing_id>/status', methods=['PATCH', 'PUT'])
+def update_listing_status(listing_id):
+    """Update listing status"""
+    try:
+        data = request.get_json()
+
+        if 'status' not in data:
+            return jsonify({
+                'error': 'Missing status field',
+                'status': 'error'
+            }), 400
+
+        updated_listing = ListingService.update_listing_status(listing_id, data['status'])
+
+        return jsonify({
+            'message': f'Listing status updated to {data["status"]}',
+            'listing': {
+                'id': updated_listing.id,
+                'status': updated_listing.status,
+                'contacted_at': updated_listing.contacted_at.isoformat() if updated_listing.contacted_at else None,
+                'responded_at': updated_listing.responded_at.isoformat() if updated_listing.responded_at else None
+            },
+            'status': 'success'
+        })
+
+    except ValueError as e:
+        return jsonify({
+            'error': str(e),
+            'status': 'error'
+        }), 400
+    except Exception as e:
+        return jsonify({
+            'error': f'Failed to update listing status: {str(e)}',
+            'status': 'error'
+        }), 500
+
+@api_bp.route('/listings/<int:listing_id>', methods=['PUT'])
+def update_listing(listing_id):
+    """Update listing details"""
+    try:
+        data = request.get_json()
+        listing = ListingService.get_listing_by_id(listing_id)
+
+        if not listing:
+            return jsonify({
+                'error': f'Listing with ID {listing_id} not found',
+                'status': 'error'
+            }), 404
+
+        # Update allowed fields
+        updatable_fields = [
+            'title', 'external_id', 'platform', 'platform_display',
+            'location', 'address', 'postal_code', 'city', 'property_type',
+            'rooms', 'living_area', 'year_built', 'price', 'price_per_sqm',
+            'contact_name', 'contact_phone', 'contact_email', 'url', 'description'
+        ]
+
+        for field in updatable_fields:
+            if field in data:
+                setattr(listing, field, data[field])
+
+        db.session.commit()
+
+        return jsonify({
+            'message': 'Listing updated successfully',
+            'listing': {
+                'id': listing.id,
+                'title': listing.title,
+                'status': listing.status
+            },
+            'status': 'success'
+        })
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({
+            'error': f'Failed to update listing: {str(e)}',
+            'status': 'error'
+        }), 500
+
+
+@api_bp.route('/listings/<int:listing_id>', methods=['DELETE'])
+def delete_listing(listing_id):
+    """Delete a listing"""
+    try:
+        success = ListingService.delete_listing(listing_id)
+
+        if not success:
+            return jsonify({
+                'error': f'Listing with ID {listing_id} not found',
+                'status': 'error'
+            }), 404
+
+        return jsonify({
+            'message': f'Listing {listing_id} deleted successfully',
+            'status': 'success'
+        }), 200
+
+    except Exception as e:
+        return jsonify({
+            'error': f'Failed to delete listing: {str(e)}',
+            'status': 'error'
+        }), 500
+
+
+@api_bp.route('/listings/status-counts', methods=['GET'])
+def get_listing_status_counts():
+    """Get counts of listings grouped by status"""
+    try:
+        # Parse customer_id if provided
+        customer_id = request.args.get('customer_id')
+
+        # This would ideally be a separate service method
+        # For now, implement basic version
+        from app.models import Listing
+        query = Listing.query
+
+        if customer_id:
+            try:
+                query = query.filter_by(customer_id=int(customer_id))
+            except ValueError:
+                return jsonify({
+                    'error': 'customer_id must be an integer',
+                    'status': 'error'
+                }), 400
+
+        # Group by status and count
+        from sqlalchemy import func
+        status_counts = db.session.query(
+            Listing.status,
+            func.count(Listing.id).label('count')
+        ).group_by(Listing.status).all()
+
+        # Format response
+        counts = {status: count for status, count in status_counts}
+
+        # Ensure all statuses are included (even if count is 0)
+        all_statuses = ['new', 'contacted', 'responded', 'appointment', 'closed']
+        for status in all_statuses:
+            if status not in counts:
+                counts[status] = 0
+
+        return jsonify({
+            'status_counts': counts,
+            'total': sum(counts.values()),
+            'status': 'success'
+        })
+
+    except Exception as e:
+        return jsonify({
+            'error': f'Failed to get status counts: {str(e)}',
+            'status': 'error'
+        }), 500
 
 
 # ==================== #
