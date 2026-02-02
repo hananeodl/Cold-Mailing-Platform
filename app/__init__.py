@@ -1,119 +1,63 @@
-# app/__init__.py - CORRIGÉ
+"""
+Flask Application Factory with Celery Integration
+"""
+
 from flask import Flask
 from flask_cors import CORS
-from config import config
-from .database import db
-from .api import api_bp
+
+from config import get_config
+from app.database import db, init_db
+from app.celery_config import make_celery
+
+# Global celery instance
+celery = None
 
 
-def create_app(config_class=config):
-    """Application factory"""
+def create_app(config_name='development'):
+    """
+    Application factory pattern
+    Creates and configures Flask app with Celery
+    """
     app = Flask(__name__)
-    app.config.from_object(config_class)
 
-    # Enable CORS for development
-    CORS(app, resources={r"/api/*": {"origins": "*"}})
+    # Load configuration
+    config_class = get_config()
 
-    # Initialize database
+    # Load all config attributes into app.config
+    for key in dir(config_class):
+        if key.isupper():
+            app.config[key] = getattr(config_class, key)
+
+    # Initialize extensions
     db.init_app(app)
+    CORS(app, origins=app.config.get('CORS_ORIGINS', ['*']))
+
+    # Initialize Celery
+    global celery
+    celery = make_celery(app)
 
     # Register blueprints
+    from app.api import api_bp
+    from app.automation_api import automation_bp
+
     app.register_blueprint(api_bp)
+    app.register_blueprint(automation_bp)
 
-    # Create tables (for development)
+    # Create database tables
     with app.app_context():
-        try:
-            db.create_all()
-            print(" Database tables created successfully!")
+        init_db()
 
-            # Create initial data if tables are empty
-            create_initial_data()
-
-        except Exception as e:
-            print(f" Error creating tables: {e}")
-            raise  # Ajoutez cette ligne pour voir l'erreur complète
-
-    # Add headers for mobile app
-    @app.after_request
-    def after_request(response):
-        response.headers.add('Access-Control-Allow-Origin', '*')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
-        response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
-        return response
+    # Health check endpoint
+    @app.route('/health')
+    def health_check():
+        return {
+            'status': 'healthy',
+            'version': app.config['API_VERSION']
+        }
 
     return app
 
 
-def create_initial_data():
-    """Create initial data if tables are empty"""
-    from .models import AccountManager, Customer, Search, Listing, Mailing, Appointment
-    from datetime import datetime, timezone, timedelta
-    import json
-
-    # Check if we have any account managers
-    if AccountManager.query.count() == 0:
-        print(" Creating initial data...")
-
-        # Create admin account
-        admin = AccountManager(
-            first_name='Daniel',
-            last_name='Mathiesen',
-            email='daniel@extraimmobilien.de',
-            phone='+49 ********',
-            role='ADMIN',
-            is_active=True
-        )
-        db.session.add(admin)
-
-        # Create account manager
-        am = AccountManager(
-            first_name='Rania',
-            last_name='rania',
-            email='rania@extraimmobilien.de',
-            phone='+212 *********',
-            role='ACCOUNT_MANAGER',
-            is_active=True
-        )
-        db.session.add(am)
-
-        db.session.commit()
-        print(" Initial account managers created")
-
-    # Check if we have any customers
-    if Customer.query.count() == 0:
-        # Create a customer
-        customer = Customer(
-            first_name='Customer',
-            last_name='customer',
-            company_name='Customer Immobilien GmbH',
-            email='Customer@customer-immobilien.de',
-            phone='+49 *********',
-            street='Musterstraße',
-            house_number='123',
-            postal_code='44789',
-            city='Bochum',
-            country_code='DE',
-            search_region='Ruhrgebiet, NRW',
-            immometrica_email='Customer@immometrica-immobilien.de',
-            immometrica_password='secure_password_123',
-            property_types=json.dumps(['Mehrfamilienhaus', 'Wohn- & Geschäftshaus']),
-            platforms=json.dumps(['kleinanzeigen', 'immoscout24', 'immowelt']),
-            search_filters=json.dumps({
-                'min_price': 250000,
-                'max_price': 2500000,
-                'min_units': 4,
-                'radius_km': 50
-            }),
-            status='ACTIVE',
-            subscription_tier='PRO',
-            last_contact_date=datetime.now(timezone.utc).date()
-        )
-        db.session.add(customer)
-
-        # Link customer to account manager
-        am = AccountManager.query.filter_by(role='ACCOUNT_MANAGER').first()
-        if am:
-            customer.account_managers.append(am)
-
-        db.session.commit()
-        print(" Initial customer created")
+def get_celery():
+    """Get celery instance"""
+    return celery

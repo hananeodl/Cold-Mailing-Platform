@@ -18,11 +18,11 @@ import csv
 import json
 from pathlib import Path
 
-TEST_IMMOSCOUT_LIMIT = 11
+TEST_IMMOSCOUT_LIMIT = 240
 
 
 # Configuration
-CSV_FILE_PATH = "/home/rania/Downloads/offers.csv"  # Change this to your CSV file path
+CSV_FILE_PATH = "C:/Users\hP\Documents\stage/offers.csv"  # Change this to your CSV file path
 
 def setup_driver():
     """Initialize Chrome driver with options"""
